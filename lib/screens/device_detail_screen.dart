@@ -23,7 +23,6 @@ class DeviceDetailScreen extends StatelessWidget {
         leading: const BackButton(color: Colors.white),
         actions: [
           if (device.isActive) ...[
-            // Pause / Resume
             IconButton(
               icon: Icon(
                 device.isPaused
@@ -35,13 +34,11 @@ class DeviceDetailScreen extends StatelessWidget {
               onPressed: () => state.togglePause(device),
               tooltip: device.isPaused ? 'استكمال' : 'إيقاف مؤقت',
             ),
-            // Add Time
             IconButton(
               icon: const Icon(Icons.more_time, color: Color(0xFF4ade80), size: 26),
               onPressed: () => _showAddTimeDialog(context, state),
               tooltip: 'إضافة وقت',
             ),
-            // Cancel (admin only)
             if (state.isAdmin)
               IconButton(
                 icon: const Icon(Icons.cancel_outlined, color: Colors.red, size: 26),
@@ -55,29 +52,20 @@ class DeviceDetailScreen extends StatelessWidget {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-            // Timer Card
             _TimerCard(
                 device: device,
                 timePrice: timePrice,
                 buffetPrice: buffetPrice),
             const SizedBox(height: 16),
-
-            // Mode selector (only when not running)
             if (!device.isActive) _ModeSelector(device: device),
-
-            // Start button
             if (!device.isActive) ...[
               const SizedBox(height: 16),
               _StartButtons(device: device),
             ],
-
-            // Buffet section
             if (device.isActive) ...[
               const SizedBox(height: 16),
               _BuffetSection(device: device),
             ],
-
-            // Stop button
             if (device.isActive) ...[
               const SizedBox(height: 16),
               _StopButton(device: device),
@@ -89,35 +77,44 @@ class DeviceDetailScreen extends StatelessWidget {
   }
 
   void _showAddTimeDialog(BuildContext context, AppState state) {
-    int selected = 30; // default minutes
+    // أزرار سريعة
+    const quickOptions = [5, 10, 15, 30, 60, 90];
+    int? selectedQuick;
+    final customCtrl = TextEditingController();
+    bool useCustom = false;
+
     showDialog(
       context: context,
       builder: (_) => StatefulBuilder(
         builder: (ctx, setState) => AlertDialog(
           backgroundColor: const Color(0xFF1c2128),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text('➕ إضافة وقت',
               style: TextStyle(
                   color: Color(0xFF4ade80), fontWeight: FontWeight.bold)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('اختر الوقت اللي هتضيفه:',
-                  style: TextStyle(color: Colors.white70)),
-              const SizedBox(height: 16),
+              // أزرار سريعة
+              const Text('اختيار سريع:',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 10),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
                 alignment: WrapAlignment.center,
-                children: [15, 30, 45, 60, 90, 120].map((min) {
-                  final isSelected = selected == min;
+                children: quickOptions.map((min) {
+                  final isSelected = !useCustom && selectedQuick == min;
                   return GestureDetector(
-                    onTap: () => setState(() => selected = min),
+                    onTap: () => setState(() {
+                      selectedQuick = min;
+                      useCustom = false;
+                      customCtrl.clear();
+                    }),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
+                          horizontal: 14, vertical: 9),
                       decoration: BoxDecoration(
                         color: isSelected
                             ? const Color(0xFF4ade80).withOpacity(0.2)
@@ -143,20 +140,75 @@ class DeviceDetailScreen extends StatelessWidget {
                   );
                 }).toList(),
               ),
+              const SizedBox(height: 16),
+              const Divider(color: Colors.white12),
+              const SizedBox(height: 8),
+              // إدخال حر
+              const Text('أو اكتب وقت تاني:',
+                  style: TextStyle(color: Colors.white54, fontSize: 12)),
+              const SizedBox(height: 8),
+              TextField(
+                controller: customCtrl,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4ade80)),
+                decoration: InputDecoration(
+                  hintText: '0',
+                  hintStyle: const TextStyle(color: Colors.white24),
+                  suffixText: 'دقيقة',
+                  suffixStyle: const TextStyle(color: Colors.white54),
+                  filled: true,
+                  fillColor: const Color(0xFF0b0e14),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Colors.white12),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: useCustom
+                          ? const Color(0xFF4ade80)
+                          : Colors.white12,
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(
+                        color: Color(0xFF4ade80), width: 2),
+                  ),
+                ),
+                onChanged: (v) {
+                  setState(() {
+                    useCustom = v.isNotEmpty;
+                    if (useCustom) selectedQuick = null;
+                  });
+                },
+              ),
             ],
           ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child:
-                    const Text('إلغاء', style: TextStyle(color: Colors.white54))),
+                child: const Text('إلغاء',
+                    style: TextStyle(color: Colors.white54))),
             FilledButton(
               onPressed: () {
-                state.addTime(device, selected);
+                int? minutes;
+                if (useCustom) {
+                  minutes = int.tryParse(customCtrl.text);
+                } else {
+                  minutes = selectedQuick;
+                }
+                if (minutes == null || minutes <= 0) return;
+                state.addTime(device, minutes);
                 Navigator.pop(ctx);
+                final label =
+                    minutes >= 60 ? '${minutes ~/ 60}س ${minutes % 60 > 0 ? "${minutes % 60}د" : ""}' : '${minutes}د';
                 ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(
-                      '✅ تم إضافة ${selected >= 60 ? "${selected ~/ 60}س" : "${selected}د"}'),
+                  content: Text('✅ تم إضافة $label'),
                   backgroundColor: Colors.green,
                 ));
               },
