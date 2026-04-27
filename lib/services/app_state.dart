@@ -17,20 +17,27 @@ class AppState extends ChangeNotifier {
     'إندومي': 25,
   };
   String adminPasswordHash = '';
+  String cashierPasswordHash = '';
   int numDevices = 6;
   bool isAdmin = false;
+  bool isCashier = false;
   Timer? _clockTimer;
   Timer? _syncTimer;
   int _syncCounter = 0;
 
+  bool get isLoggedIn => isAdmin || isCashier;
+
   static String hashPassword(String p) =>
       sha256.convert(utf8.encode(p)).toString();
 
-  static const String _defaultHash =
-      '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92';
+  static const String _defaultAdminHash =
+      '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92'; // 123456
+  static const String _defaultCashierHash =
+      'ef797c8118f02dfb649607dd5d3f8c7623048c9c063d532cc95c5ed7a898a64f'; // 12345678
 
   AppState() {
-    adminPasswordHash = _defaultHash;
+    adminPasswordHash = _defaultAdminHash;
+    cashierPasswordHash = _defaultCashierHash;
     _initDevices();
     loadData();
     _startClock();
@@ -55,14 +62,12 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> loadData() async {
-    // محلي أول
     final prefs = await SharedPreferences.getInstance();
     final local = prefs.getString('app_data');
     if (local != null) {
       _applyData(jsonDecode(local));
       notifyListeners();
     }
-    // Firebase في الخلفية
     _syncFromFirebase();
   }
 
@@ -72,6 +77,7 @@ class AppState extends ChangeNotifier {
     menu = Map<String, int>.from(data['menu'] ?? menu);
     numDevices = data['num_devices'] ?? 6;
     adminPasswordHash = data['admin_password_hash'] ?? adminPasswordHash;
+    cashierPasswordHash = data['cashier_password_hash'] ?? cashierPasswordHash;
     final devStates = data['devices_state'] as List? ?? [];
     devices = [];
     for (int i = 0; i < numDevices; i++) {
@@ -90,6 +96,7 @@ class AppState extends ChangeNotifier {
         'menu': menu,
         'num_devices': numDevices,
         'admin_password_hash': adminPasswordHash,
+        'cashier_password_hash': cashierPasswordHash,
         'devices_state': devices.map((d) => d.toJson()).toList(),
       };
 
@@ -137,6 +144,30 @@ class AppState extends ChangeNotifier {
       d.isPaused = true;
       d.pauseStartTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     }
+    saveData();
+    notifyListeners();
+  }
+
+  /// إضافة وقت (بالدقائق) لجهاز شغال
+  void addTime(PSDevice d, int minutes) {
+    d.addedSeconds -= minutes * 60; // نطرح من startTime بشكل غير مباشر
+    // الطريقة الصحيحة: نحرك startTime للأمام = وكأنه بدأ بعدين
+    if (d.startTime != null) {
+      d.startTime = d.startTime! - minutes * 60;
+    }
+    saveData();
+    notifyListeners();
+  }
+
+  /// إلغاء جهاز بدون تسجيل في التاريخ
+  void cancelDevice(PSDevice d) {
+    d.status = 'متاح';
+    d.startTime = null;
+    d.addedSeconds = 0;
+    d.isPaused = false;
+    d.pauseStartTime = null;
+    d.orders = {};
+    d.timerText = '00:00:00';
     saveData();
     notifyListeners();
   }
@@ -197,26 +228,65 @@ class AppState extends ChangeNotifier {
     if (result != null) {
       history.clear();
       await saveData();
+      await _syncToFirebase(); // ← مهم: نرفع الحالة الجديدة (بدون history) لـFirebase
       notifyListeners();
     }
   }
 
-  bool login(String password) {
-    if (hashPassword(password) == adminPasswordHash) {
+  // --- Menu Management (Admin only) ---
+
+  void addMenuItem(String name, int price) {
+    menu[name] = price;
+    saveData();
+    notifyListeners();
+  }
+
+  void removeMenuItem(String name) {
+    menu.remove(name);
+    saveData();
+    notifyListeners();
+  }
+
+  void updateMenuItem(String oldName, String newName, int price) {
+    menu.remove(oldName);
+    menu[newName] = price;
+    saveData();
+    notifyListeners();
+  }
+
+  // --- Auth ---
+
+  /// returns 'admin' | 'cashier' | null
+  String? login(String password) {
+    final hash = hashPassword(password);
+    if (hash == adminPasswordHash) {
       isAdmin = true;
+      isCashier = false;
       notifyListeners();
-      return true;
+      return 'admin';
     }
-    return false;
+    if (hash == cashierPasswordHash) {
+      isCashier = true;
+      isAdmin = false;
+      notifyListeners();
+      return 'cashier';
+    }
+    return null;
   }
 
   void logout() {
     isAdmin = false;
+    isCashier = false;
     notifyListeners();
   }
 
   void changePassword(String newPass) {
     adminPasswordHash = hashPassword(newPass);
+    saveData();
+  }
+
+  void changeCashierPassword(String newPass) {
+    cashierPasswordHash = hashPassword(newPass);
     saveData();
   }
 
