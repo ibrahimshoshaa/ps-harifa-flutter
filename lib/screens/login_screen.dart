@@ -34,8 +34,8 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   void _tryLogin() {
-    final ok = context.read<AppState>().login(_controller.text);
-    if (!ok) {
+    final result = context.read<AppState>().login(_controller.text);
+    if (result == null) {
       setState(() => _error = true);
       _shakeCtrl.forward(from: 0);
     }
@@ -76,7 +76,17 @@ class _LoginScreenState extends State<LoginScreen>
               const SizedBox(height: 8),
               Text('أدخل كلمة السر',
                   style: TextStyle(color: Colors.white.withOpacity(0.6))),
-              const SizedBox(height: 32),
+              const SizedBox(height: 8),
+              // hint for roles
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  _RoleBadge('👑 أدمن', Colors.amber),
+                  const SizedBox(width: 8),
+                  _RoleBadge('🧾 كاشير', const Color(0xFF38bdf8)),
+                ],
+              ),
+              const SizedBox(height: 24),
 
               // Password field with shake animation
               AnimatedBuilder(
@@ -84,7 +94,9 @@ class _LoginScreenState extends State<LoginScreen>
                 builder: (ctx, child) => Transform.translate(
                   offset: Offset(
                       _shakeCtrl.isAnimating
-                          ? (_shakeCtrl.value < 0.5 ? -_shakeAnim.value : _shakeAnim.value)
+                          ? (_shakeCtrl.value < 0.5
+                              ? -_shakeAnim.value
+                              : _shakeAnim.value)
                           : 0,
                       0),
                   child: child,
@@ -102,7 +114,8 @@ class _LoginScreenState extends State<LoginScreen>
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
                       borderSide: BorderSide(
-                          color: _error ? Colors.red : const Color(0xFF38bdf8)),
+                          color:
+                              _error ? Colors.red : const Color(0xFF38bdf8)),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(16),
@@ -118,7 +131,9 @@ class _LoginScreenState extends State<LoginScreen>
                     ),
                     suffixIcon: IconButton(
                       icon: Icon(
-                          _obscure ? Icons.visibility : Icons.visibility_off,
+                          _obscure
+                              ? Icons.visibility
+                              : Icons.visibility_off,
                           color: Colors.white54),
                       onPressed: () => setState(() => _obscure = !_obscure),
                     ),
@@ -148,6 +163,27 @@ class _LoginScreenState extends State<LoginScreen>
           ),
         ),
       ),
+    );
+  }
+}
+
+class _RoleBadge extends StatelessWidget {
+  final String label;
+  final Color color;
+  const _RoleBadge(this.label, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.4)),
+      ),
+      child: Text(label,
+          style:
+              TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold)),
     );
   }
 }
