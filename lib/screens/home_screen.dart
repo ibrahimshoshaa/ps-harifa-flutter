@@ -67,6 +67,7 @@ class HomeScreen extends StatelessWidget {
 class _BottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xFF1c2128),
@@ -81,13 +82,15 @@ class _BottomBar extends StatelessWidget {
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const HistoryScreen())),
           ),
-          _BarButton(
-            icon: Icons.settings,
-            label: 'الإعدادات',
-            color: Colors.white54,
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const SettingsScreen())),
-          ),
+          // الإعدادات للأدمن فقط
+          if (state.isAdmin)
+            _BarButton(
+              icon: Icons.settings,
+              label: 'الإعدادات',
+              color: Colors.white54,
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const SettingsScreen())),
+            ),
         ],
       ),
     );
