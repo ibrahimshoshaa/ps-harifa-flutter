@@ -33,6 +33,9 @@ jobs:
           cp temp_app/analysis_options.yaml . || true
           rm -rf temp_app
 
+      - name: Install app icons
+        run: bash setup_icons.sh
+
       - name: Install dependencies
         run: flutter pub get
 
