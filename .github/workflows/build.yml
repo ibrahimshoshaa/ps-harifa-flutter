@@ -25,6 +25,14 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
 
+      - name: Create Flutter project scaffold
+        run: |
+          flutter create --org com.starnet --project-name ps_harifa temp_app
+          cp -r temp_app/android .
+          cp -r temp_app/ios .
+          cp temp_app/analysis_options.yaml . || true
+          rm -rf temp_app
+
       - name: Install dependencies
         run: flutter pub get
 
