@@ -24,6 +24,7 @@ class AppState extends ChangeNotifier {
   Timer? _clockTimer;
   Timer? _syncTimer;
   int _syncCounter = 0;
+  bool _archiving = false; // ← منع sync أثناء الأرشفة
 
   bool get isLoggedIn => isAdmin || isCashier;
 
@@ -31,9 +32,9 @@ class AppState extends ChangeNotifier {
       sha256.convert(utf8.encode(p)).toString();
 
   static const String _defaultAdminHash =
-      '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92'; // 123456
+      '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92';
   static const String _defaultCashierHash =
-      'ef797c8118f02dfb649607dd5d3f8c7623048c9c063d532cc95c5ed7a898a64f'; // 12345678
+      'ef797c8118f02dfb649607dd5d3f8c7623048c9c063d532cc95c5ed7a898a64f';
 
   AppState() {
     adminPasswordHash = _defaultAdminHash;
@@ -55,7 +56,7 @@ class AppState extends ChangeNotifier {
       _syncCounter++;
       if (_syncCounter >= 300) {
         _syncCounter = 0;
-        _syncToFirebase();
+        if (!_archiving) _syncToFirebase();
       }
       notifyListeners();
     });
@@ -111,6 +112,7 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _syncFromFirebase() async {
+    if (_archiving) return; // ← مش نرجع بيانات قديمة أثناء الأرشفة
     final data = await FirebaseService.get('app_data');
     if (data != null) {
       _applyData(Map<String, dynamic>.from(data));
@@ -148,7 +150,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// إضافة وقت (بالدقائق) لجهاز شغال
   void addTime(PSDevice d, int minutes) {
     if (d.startTime != null) {
       d.startTime = d.startTime! - minutes * 60;
@@ -157,7 +158,6 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// إلغاء جهاز بدون تسجيل في التاريخ
   void cancelDevice(PSDevice d) {
     d.status = 'متاح';
     d.startTime = null;
@@ -211,27 +211,42 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> archiveAndClear() async {
-    if (history.isEmpty) return;
-    final totalTime = history.fold(0.0, (s, h) => s + (h['time_cost'] ?? 0));
-    final totalBuffet = history.fold(0.0, (s, h) => s + (h['buffet_cost'] ?? 0));
-    final archive = {
-      'date': DateTime.now().toString(),
-      'total_time': totalTime,
-      'total_buffet': totalBuffet,
-      'total_overall': totalTime + totalBuffet,
-      'records': history,
-    };
-    final result = await FirebaseService.push('archives', archive);
-    if (result != null) {
+  Future<bool> archiveAndClear() async {
+    if (history.isEmpty) return false;
+    _archiving = true; // ← وقف الـ sync
+
+    try {
+      final totalTime = history.fold(0.0, (s, h) => s + (h['time_cost'] ?? 0));
+      final totalBuffet = history.fold(0.0, (s, h) => s + (h['buffet_cost'] ?? 0));
+      final archive = {
+        'date': DateTime.now().toString(),
+        'total_time': totalTime,
+        'total_buffet': totalBuffet,
+        'total_overall': totalTime + totalBuffet,
+        'records': history,
+      };
+
+      // 1) ارفع الأرشيف لـ Firebase
+      final result = await FirebaseService.push('archives', archive);
+      if (result == null) return false;
+
+      // 2) امسح الـ history محلياً
       history.clear();
+
+      // 3) احفظ محلياً
       await saveData();
-      await _syncToFirebase(); // ← مهم: نرفع الحالة الجديدة (بدون history) لـFirebase
+
+      // 4) ارفع البيانات الجديدة (بدون history) لـ Firebase
+      await _syncToFirebase();
+
       notifyListeners();
+      return true;
+    } finally {
+      _archiving = false; // ← فك الـ sync
     }
   }
 
-  // --- Menu Management (Admin only) ---
+  // --- Menu Management ---
 
   void addMenuItem(String name, int price) {
     menu[name] = price;
@@ -254,7 +269,6 @@ class AppState extends ChangeNotifier {
 
   // --- Auth ---
 
-  /// returns 'admin' | 'cashier' | null
   String? login(String password) {
     final hash = hashPassword(password);
     if (hash == adminPasswordHash) {
