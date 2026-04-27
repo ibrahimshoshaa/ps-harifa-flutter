@@ -150,8 +150,6 @@ class AppState extends ChangeNotifier {
 
   /// إضافة وقت (بالدقائق) لجهاز شغال
   void addTime(PSDevice d, int minutes) {
-    d.addedSeconds -= minutes * 60; // نطرح من startTime بشكل غير مباشر
-    // الطريقة الصحيحة: نحرك startTime للأمام = وكأنه بدأ بعدين
     if (d.startTime != null) {
       d.startTime = d.startTime! - minutes * 60;
     }
