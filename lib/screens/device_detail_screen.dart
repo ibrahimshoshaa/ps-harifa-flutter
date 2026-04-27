@@ -18,18 +18,37 @@ class DeviceDetailScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color(0xFF0b0e14),
         title: Text(device.displayName,
-            style: const TextStyle(color: Color(0xFF38bdf8), fontWeight: FontWeight.bold)),
+            style: const TextStyle(
+                color: Color(0xFF38bdf8), fontWeight: FontWeight.bold)),
         leading: const BackButton(color: Colors.white),
         actions: [
-          if (device.isActive)
+          if (device.isActive) ...[
+            // Pause / Resume
             IconButton(
               icon: Icon(
-                device.isPaused ? Icons.play_circle_fill : Icons.pause_circle_filled,
+                device.isPaused
+                    ? Icons.play_circle_fill
+                    : Icons.pause_circle_filled,
                 color: device.isPaused ? Colors.amber : const Color(0xFF38bdf8),
                 size: 30,
               ),
               onPressed: () => state.togglePause(device),
+              tooltip: device.isPaused ? 'استكمال' : 'إيقاف مؤقت',
             ),
+            // Add Time
+            IconButton(
+              icon: const Icon(Icons.more_time, color: Color(0xFF4ade80), size: 26),
+              onPressed: () => _showAddTimeDialog(context, state),
+              tooltip: 'إضافة وقت',
+            ),
+            // Cancel (admin only)
+            if (state.isAdmin)
+              IconButton(
+                icon: const Icon(Icons.cancel_outlined, color: Colors.red, size: 26),
+                onPressed: () => _showCancelDialog(context, state),
+                tooltip: 'إلغاء الجهاز',
+              ),
+          ],
         ],
       ),
       body: SingleChildScrollView(
@@ -37,7 +56,10 @@ class DeviceDetailScreen extends StatelessWidget {
         child: Column(
           children: [
             // Timer Card
-            _TimerCard(device: device, timePrice: timePrice, buffetPrice: buffetPrice),
+            _TimerCard(
+                device: device,
+                timePrice: timePrice,
+                buffetPrice: buffetPrice),
             const SizedBox(height: 16),
 
             // Mode selector (only when not running)
@@ -65,7 +87,121 @@ class DeviceDetailScreen extends StatelessWidget {
       ),
     );
   }
+
+  void _showAddTimeDialog(BuildContext context, AppState state) {
+    int selected = 30; // default minutes
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          backgroundColor: const Color(0xFF1c2128),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('➕ إضافة وقت',
+              style: TextStyle(
+                  color: Color(0xFF4ade80), fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('اختر الوقت اللي هتضيفه:',
+                  style: TextStyle(color: Colors.white70)),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: [15, 30, 45, 60, 90, 120].map((min) {
+                  final isSelected = selected == min;
+                  return GestureDetector(
+                    onTap: () => setState(() => selected = min),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? const Color(0xFF4ade80).withOpacity(0.2)
+                            : const Color(0xFF0b0e14),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: isSelected
+                              ? const Color(0xFF4ade80)
+                              : Colors.white24,
+                          width: isSelected ? 2 : 1,
+                        ),
+                      ),
+                      child: Text(
+                        min >= 60 ? '${min ~/ 60}س' : '${min}د',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: isSelected
+                              ? const Color(0xFF4ade80)
+                              : Colors.white70,
+                        ),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child:
+                    const Text('إلغاء', style: TextStyle(color: Colors.white54))),
+            FilledButton(
+              onPressed: () {
+                state.addTime(device, selected);
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(
+                      '✅ تم إضافة ${selected >= 60 ? "${selected ~/ 60}س" : "${selected}د"}'),
+                  backgroundColor: Colors.green,
+                ));
+              },
+              style: FilledButton.styleFrom(
+                  backgroundColor: const Color(0xFF4ade80)),
+              child: const Text('إضافة', style: TextStyle(color: Colors.black)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCancelDialog(BuildContext context, AppState state) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: const Color(0xFF1c2128),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('⚠️ إلغاء الجهاز',
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+        content: Text(
+            'هيتم إلغاء ${device.displayName} بدون تسجيل في السجلات. متأكد؟',
+            style: const TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('لأ', style: TextStyle(color: Colors.white54))),
+          FilledButton(
+            onPressed: () {
+              state.cancelDevice(device);
+              Navigator.pop(context);
+              Navigator.pop(context);
+            },
+            style: FilledButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('إلغاء الجهاز'),
+          ),
+        ],
+      ),
+    );
+  }
 }
+
+// ─── Timer Card ───────────────────────────────────────────────────────────────
 
 class _TimerCard extends StatelessWidget {
   final PSDevice device;
@@ -108,9 +244,9 @@ class _TimerCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Status badge
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             decoration: BoxDecoration(
               color: (isPaused
                       ? Colors.amber
@@ -133,8 +269,6 @@ class _TimerCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Big Timer
           Text(
             device.timerText,
             style: TextStyle(
@@ -145,7 +279,9 @@ class _TimerCard extends StatelessWidget {
               shadows: isActive
                   ? [
                       Shadow(
-                        color: (isPaused ? Colors.amber : const Color(0xFF38bdf8))
+                        color: (isPaused
+                                ? Colors.amber
+                                : const Color(0xFF38bdf8))
                             .withOpacity(0.5),
                         blurRadius: 12,
                       )
@@ -154,8 +290,6 @@ class _TimerCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Price breakdown
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -183,7 +317,8 @@ class _PriceTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.white54)),
+        Text(label,
+            style: const TextStyle(fontSize: 12, color: Colors.white54)),
         const SizedBox(height: 4),
         Text(
           '${value.toStringAsFixed(1)} ج',
@@ -197,6 +332,8 @@ class _PriceTile extends StatelessWidget {
     );
   }
 }
+
+// ─── Mode Selector ─────────────────────────────────────────────────────────────
 
 class _ModeSelector extends StatelessWidget {
   final PSDevice device;
@@ -267,14 +404,19 @@ class _ModeBtn extends StatelessWidget {
           child: Column(
             children: [
               Icon(icon,
-                  color: selected ? const Color(0xFF38bdf8) : Colors.white54),
+                  color: selected
+                      ? const Color(0xFF38bdf8)
+                      : Colors.white54),
               const SizedBox(height: 8),
               Text(label,
                   style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: selected ? const Color(0xFF38bdf8) : Colors.white)),
+                      color: selected
+                          ? const Color(0xFF38bdf8)
+                          : Colors.white)),
               Text('$price ج/س',
-                  style: const TextStyle(fontSize: 12, color: Colors.white54)),
+                  style:
+                      const TextStyle(fontSize: 12, color: Colors.white54)),
             ],
           ),
         ),
@@ -282,6 +424,8 @@ class _ModeBtn extends StatelessWidget {
     );
   }
 }
+
+// ─── Start Buttons ─────────────────────────────────────────────────────────────
 
 class _StartButtons extends StatelessWidget {
   final PSDevice device;
@@ -302,12 +446,15 @@ class _StartButtons extends StatelessWidget {
         label: const Text('بدء اللعب', style: TextStyle(fontSize: 18)),
         style: FilledButton.styleFrom(
           backgroundColor: Colors.green.shade700,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
       ),
     );
   }
 }
+
+// ─── Buffet Section ─────────────────────────────────────────────────────────────
 
 class _BuffetSection extends StatelessWidget {
   final PSDevice device;
@@ -329,13 +476,22 @@ class _BuffetSection extends StatelessWidget {
           const Text('🥤 البوفيه',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 12),
-          ...state.menu.entries.map((e) => _BuffetItem(
-                name: e.key,
-                price: e.value,
-                qty: device.orders[e.key] ?? 0,
-                onAdd: () => state.addOrder(device, e.key, 1),
-                onRemove: () => state.addOrder(device, e.key, -1),
-              )),
+          if (state.menu.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 8),
+                child: Text('لا يوجد منتجات في البوفيه',
+                    style: TextStyle(color: Colors.white54)),
+              ),
+            )
+          else
+            ...state.menu.entries.map((e) => _BuffetItem(
+                  name: e.key,
+                  price: e.value,
+                  qty: device.orders[e.key] ?? 0,
+                  onAdd: () => state.addOrder(device, e.key, 1),
+                  onRemove: () => state.addOrder(device, e.key, -1),
+                )),
         ],
       ),
     );
@@ -365,7 +521,8 @@ class _BuffetItem extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(name,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 Text('$price ج',
                     style: const TextStyle(
                         color: Colors.white54, fontSize: 12)),
@@ -409,6 +566,8 @@ class _BuffetItem extends StatelessWidget {
     );
   }
 }
+
+// ─── Stop Button ─────────────────────────────────────────────────────────────────
 
 class _StopButton extends StatelessWidget {
   final PSDevice device;
