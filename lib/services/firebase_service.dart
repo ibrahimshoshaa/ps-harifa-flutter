@@ -3,8 +3,8 @@ import 'package:http/http.dart' as http;
 
 class FirebaseService {
   static const String _baseUrl =
-      'https://al-harifa-default-rtdb.firebaseio.com';
-  static const String _secret = 'alharifa2024secret';
+      'https://elharifaplaystation-default-rtdb.firebaseio.com';
+  static const String _secret = 'qwhoWfXniIDvcmOYqFFLEFqRwaunBlVyymoVjXE4';
 
   static String _url(String path) => '$_baseUrl/$path.json?auth=$_secret';
 
