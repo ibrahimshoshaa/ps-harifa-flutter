@@ -24,7 +24,8 @@ class AppState extends ChangeNotifier {
   Timer? _clockTimer;
   Timer? _syncTimer;
   int _syncCounter = 0;
-  bool _archiving = false; // ← منع sync أثناء الأرشفة
+  bool _archiving = false;
+  int _localTimestamp = 0; // timestamp للمقارنة مع Firebase
 
   bool get isLoggedIn => isAdmin || isCashier;
 
@@ -66,7 +67,9 @@ class AppState extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     final local = prefs.getString('app_data');
     if (local != null) {
-      _applyData(jsonDecode(local));
+      final decoded = jsonDecode(local);
+      _applyData(decoded);
+      _localTimestamp = decoded['last_updated'] ?? 0;
       notifyListeners();
     }
     _syncFromFirebase();
@@ -91,15 +94,19 @@ class AppState extends ChangeNotifier {
     for (var d in devices) d.updateTimer();
   }
 
-  Map<String, dynamic> _buildDataDict() => {
-        'history': history,
-        'prices': prices,
-        'menu': menu,
-        'num_devices': numDevices,
-        'admin_password_hash': adminPasswordHash,
-        'cashier_password_hash': cashierPasswordHash,
-        'devices_state': devices.map((d) => d.toJson()).toList(),
-      };
+  Map<String, dynamic> _buildDataDict() {
+    _localTimestamp = DateTime.now().millisecondsSinceEpoch;
+    return {
+      'history': history,
+      'prices': prices,
+      'menu': menu,
+      'num_devices': numDevices,
+      'admin_password_hash': adminPasswordHash,
+      'cashier_password_hash': cashierPasswordHash,
+      'devices_state': devices.map((d) => d.toJson()).toList(),
+      'last_updated': _localTimestamp,
+    };
+  }
 
   Future<void> saveData() async {
     final data = _buildDataDict();
@@ -112,13 +119,23 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _syncFromFirebase() async {
-    if (_archiving) return; // ← مش نرجع بيانات قديمة أثناء الأرشفة
-    final data = await FirebaseService.get('app_data');
-    if (data != null) {
+    if (_archiving) return;
+    try {
+      final data = await FirebaseService.get('app_data');
+      if (data == null) return;
+
+      final remoteTimestamp = data['last_updated'] ?? 0;
+
+      // ← بناخد من Firebase بس لو أحدث من اللي عندنا
+      if (remoteTimestamp <= _localTimestamp) return;
+
+      _localTimestamp = remoteTimestamp;
       _applyData(Map<String, dynamic>.from(data));
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('app_data', jsonEncode(data));
       notifyListeners();
+    } catch (e) {
+      print('Firebase sync error: $e');
     }
   }
 
@@ -213,12 +230,11 @@ class AppState extends ChangeNotifier {
 
   Future<bool> archiveAndClear() async {
     if (history.isEmpty) return false;
-    _archiving = true; // ← وقف الـ sync
+    _archiving = true;
 
     try {
       final totalTime = history.fold(0.0, (s, h) => s + (h['time_cost'] ?? 0));
       final totalBuffet = history.fold(0.0, (s, h) => s + (h['buffet_cost'] ?? 0));
-      // نعمل نسخة من الـ history قبل ما نمسحه
       final historySnapshot = List<Map<String, dynamic>>.from(history);
       final archive = {
         'date': DateTime.now().toString(),
@@ -228,25 +244,22 @@ class AppState extends ChangeNotifier {
         'records': historySnapshot,
       };
 
-      // 1) ارفع الأرشيف لـ Firebase (حاول 3 مرات)
+      // 1) ارفع الأرشيف لـ Firebase (3 محاولات)
       String? result;
-      for (int attempt = 0; attempt < 3 && result == null; attempt++) {
+      for (int i = 0; i < 3 && result == null; i++) {
         result = await FirebaseService.push('archives', archive);
         if (result == null) await Future.delayed(const Duration(seconds: 1));
       }
       if (result == null) return false;
 
-      // 2) امسح الـ history محلياً
+      // 2) امسح الـ history
       history.clear();
 
-      // 3) احفظ محلياً أولاً (عشان لو الـ Firebase فشل يبقى محلياً آمن)
+      // 3) احفظ محلياً (timestamp جديد عالي = Firebase القديم مش هيرجعه)
       await saveData();
 
-      // 4) ارفع البيانات الجديدة (بدون history) لـ Firebase
+      // 4) ارفع للـ Firebase
       await _syncToFirebase();
-
-      // 5) انتظر شوية قبل ما نفك الـ _archiving عشان الـ sync مايرجعش بيانات قديمة
-      await Future.delayed(const Duration(seconds: 2));
 
       notifyListeners();
       return true;
@@ -254,7 +267,7 @@ class AppState extends ChangeNotifier {
       print('Archive error: $e');
       return false;
     } finally {
-      _archiving = false; // ← فك الـ sync
+      _archiving = false;
     }
   }
 
