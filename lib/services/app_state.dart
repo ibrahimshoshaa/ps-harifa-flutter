@@ -218,29 +218,41 @@ class AppState extends ChangeNotifier {
     try {
       final totalTime = history.fold(0.0, (s, h) => s + (h['time_cost'] ?? 0));
       final totalBuffet = history.fold(0.0, (s, h) => s + (h['buffet_cost'] ?? 0));
+      // نعمل نسخة من الـ history قبل ما نمسحه
+      final historySnapshot = List<Map<String, dynamic>>.from(history);
       final archive = {
         'date': DateTime.now().toString(),
         'total_time': totalTime,
         'total_buffet': totalBuffet,
         'total_overall': totalTime + totalBuffet,
-        'records': history,
+        'records': historySnapshot,
       };
 
-      // 1) ارفع الأرشيف لـ Firebase
-      final result = await FirebaseService.push('archives', archive);
+      // 1) ارفع الأرشيف لـ Firebase (حاول 3 مرات)
+      String? result;
+      for (int attempt = 0; attempt < 3 && result == null; attempt++) {
+        result = await FirebaseService.push('archives', archive);
+        if (result == null) await Future.delayed(const Duration(seconds: 1));
+      }
       if (result == null) return false;
 
       // 2) امسح الـ history محلياً
       history.clear();
 
-      // 3) احفظ محلياً
+      // 3) احفظ محلياً أولاً (عشان لو الـ Firebase فشل يبقى محلياً آمن)
       await saveData();
 
       // 4) ارفع البيانات الجديدة (بدون history) لـ Firebase
       await _syncToFirebase();
 
+      // 5) انتظر شوية قبل ما نفك الـ _archiving عشان الـ sync مايرجعش بيانات قديمة
+      await Future.delayed(const Duration(seconds: 2));
+
       notifyListeners();
       return true;
+    } catch (e) {
+      print('Archive error: $e');
+      return false;
     } finally {
       _archiving = false; // ← فك الـ sync
     }
