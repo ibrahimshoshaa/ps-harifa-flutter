@@ -38,7 +38,8 @@ class PSApp extends StatelessWidget {
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFF38bdf8),
             foregroundColor: Colors.black,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ),
@@ -53,6 +54,6 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    return state.isAdmin ? const HomeScreen() : const LoginScreen();
+    return state.isLoggedIn ? const HomeScreen() : const LoginScreen();
   }
 }
