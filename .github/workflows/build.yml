@@ -25,103 +25,62 @@ jobs:
           flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: Fix Firebase references
+      - name: Fix Firebase shim
         run: |
-          # إنشاء supabase_service.dart لو مش موجود
-          cat > lib/services/supabase_service.dart << 'DART'
-          import 'dart:convert';
-          import 'package:http/http.dart' as http;
-
-          class SupabaseService {
-            static const String _url = 'https://afajbspvzpjmdputdhow.supabase.co';
-            static const String _key = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFmYWpic3B2enBqbWRwdXRkaG93Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzczODc1MjIsImV4cCI6MjA5Mjk2MzUyMn0.FupMVDjogd50RL8hg3F3Dnn9rpsiUtIlcekAvVg4ZUU';
-
-            static Map<String, String> get _headers => {
-              'apikey': _key,
-              'Authorization': 'Bearer $_key',
-              'Content-Type': 'application/json',
-              'Prefer': 'return=representation',
-            };
-
-            static Future<Map<String, dynamic>?> getAppData() async {
-              try {
-                final r = await http.get(Uri.parse('$_url/rest/v1/app_data?id=eq.main'), headers: _headers).timeout(const Duration(seconds: 10));
-                if (r.statusCode == 200) {
-                  final list = jsonDecode(r.body) as List;
-                  if (list.isNotEmpty) return Map<String, dynamic>.from(list.first);
-                }
-              } catch (e) { print('getAppData error: $e'); }
-              return null;
-            }
-
-            static Future<bool> setAppData(Map<String, dynamic> data) async {
-              try {
-                data['id'] = 'main';
-                data['updated_at'] = DateTime.now().toIso8601String();
-                final r = await http.patch(Uri.parse('$_url/rest/v1/app_data?id=eq.main'), headers: _headers, body: jsonEncode(data)).timeout(const Duration(seconds: 10));
-                return r.statusCode == 200 || r.statusCode == 204;
-              } catch (e) { print('setAppData error: $e'); return false; }
-            }
-
-            static Future<List<Map<String, dynamic>>> getArchives() async {
-              try {
-                final r = await http.get(Uri.parse('$_url/rest/v1/archives?order=created_at.desc'), headers: _headers).timeout(const Duration(seconds: 10));
-                if (r.statusCode == 200) return (jsonDecode(r.body) as List).map((v) => Map<String, dynamic>.from(v)).toList();
-              } catch (e) { print('getArchives error: $e'); }
-              return [];
-            }
-
-            static Future<bool> pushArchive(Map<String, dynamic> data) async {
-              try {
-                final r = await http.post(Uri.parse('$_url/rest/v1/archives'), headers: _headers, body: jsonEncode(data)).timeout(const Duration(seconds: 10));
-                return r.statusCode == 201;
-              } catch (e) { print('pushArchive error: $e'); return false; }
-            }
-
-            static Future<bool> deleteArchives() async {
-              try {
-                final r = await http.delete(Uri.parse('$_url/rest/v1/archives?id=neq.00000000-0000-0000-0000-000000000000'), headers: _headers).timeout(const Duration(seconds: 10));
-                return r.statusCode == 200 || r.statusCode == 204;
-              } catch (e) { print('deleteArchives error: $e'); return false; }
-            }
-
-            static Future<List<Map<String, dynamic>>> getYearlyArchives() async {
-              try {
-                final r = await http.get(Uri.parse('$_url/rest/v1/yearly_archives?order=created_at.desc'), headers: _headers).timeout(const Duration(seconds: 10));
-                if (r.statusCode == 200) return (jsonDecode(r.body) as List).map((v) => Map<String, dynamic>.from(v)).toList();
-              } catch (e) { print('getYearlyArchives error: $e'); }
-              return [];
-            }
-
-            static Future<bool> pushYearlyArchive(Map<String, dynamic> data) async {
-              try {
-                final r = await http.post(Uri.parse('$_url/rest/v1/yearly_archives'), headers: _headers, body: jsonEncode(data)).timeout(const Duration(seconds: 10));
-                return r.statusCode == 201;
-              } catch (e) { print('pushYearlyArchive error: $e'); return false; }
-            }
-          }
-          DART
-
-          # إنشاء firebase_service.dart وهمي يشير لـ Supabase
           cat > lib/services/firebase_service.dart << 'DART'
-          export 'supabase_service.dart';
-          class FirebaseService {
-            static Future<dynamic> get(String path) => path == 'archives' ? SupabaseService.getArchives() : SupabaseService.getAppData();
-            static Future<bool> set(String path, dynamic data) => SupabaseService.setAppData(data);
-            static Future<String?> push(String path, dynamic data) async {
-              final ok = path == 'yearly_archives' ? await SupabaseService.pushYearlyArchive(data) : await SupabaseService.pushArchive(data);
-              return ok ? 'ok' : null;
-            }
-            static Future<bool> delete(String path) => SupabaseService.deleteArchives();
-          }
-          DART
+import 'supabase_service.dart';
+export 'supabase_service.dart';
 
-      - name: Create Flutter project scaffold
+class FirebaseService {
+  static Future<dynamic> get(String path) async {
+    if (path == 'archives') return await SupabaseService.getArchives();
+    return await SupabaseService.getAppData();
+  }
+  static Future<bool> set(String path, dynamic data) =>
+      SupabaseService.setAppData(Map<String, dynamic>.from(data));
+  static Future<String?> push(String path, dynamic data) async {
+    final ok = path == 'yearly_archives'
+        ? await SupabaseService.pushYearlyArchive(Map<String, dynamic>.from(data))
+        : await SupabaseService.pushArchive(Map<String, dynamic>.from(data));
+    return ok ? 'ok' : null;
+  }
+  static Future<bool> delete(String path) => SupabaseService.deleteArchives();
+}
+DART
+
+      - name: Generate app icon
+        run: |
+          sudo apt-get install -y imagemagick
+          convert -size 512x512 xc:'#0b0e14' \
+            -fill none -stroke '#38bdf8' -strokewidth 8 \
+            -draw "circle 256,256 256,56" \
+            -font DejaVu-Sans-Bold -pointsize 140 \
+            -fill '#38bdf8' -gravity Center \
+            -annotate -0+0 'PS' \
+            /tmp/icon.png
+          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
+          mkdir -p android/app/src/main/res/mipmap-xxhdpi
+          mkdir -p android/app/src/main/res/mipmap-xhdpi
+          mkdir -p android/app/src/main/res/mipmap-hdpi
+          mkdir -p android/app/src/main/res/mipmap-mdpi
+          convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 96x96  android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 72x72  android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 48x48  android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+
+      - name: Create Flutter scaffold
         run: |
           flutter create --org com.starnet --project-name ps_harifa temp_app
-          cp -r temp_app/android .
-          cp -r temp_app/ios .
+          cp -r temp_app/android . 2>/dev/null || true
+          cp -r temp_app/ios . 2>/dev/null || true
           rm -rf temp_app
+          # restore icon after scaffold
+          convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 96x96  android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 72x72  android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 48x48  android/app/src/main/res/mipmap-mdpi/ic_launcher.png
 
       - name: Install dependencies
         run: flutter pub get
