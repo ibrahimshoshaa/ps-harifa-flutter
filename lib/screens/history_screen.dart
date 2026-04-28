@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/app_state.dart';
-import '../services/firebase_service.dart';
 import 'archive_screen.dart';
 
 class HistoryScreen extends StatelessWidget {
@@ -22,18 +21,17 @@ class HistoryScreen extends StatelessWidget {
             style: TextStyle(color: Color(0xFF38bdf8), fontWeight: FontWeight.bold)),
         leading: const BackButton(color: Colors.white),
         actions: [
-          // الأرشيف الشامل للأدمن فقط
-          if (state.isAdmin)
-            IconButton(
-              icon: const Icon(Icons.history_edu, color: Colors.white54),
-              tooltip: 'الأرشيف الشامل',
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const ArchiveScreen())),
-            ),
+          IconButton(
+            icon: const Icon(Icons.history_edu, color: Colors.white54),
+            tooltip: 'الأرشيف الشامل',
+            onPressed: () => Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const ArchiveScreen())),
+          ),
         ],
       ),
       body: Column(
         children: [
+          // Summary card
           Container(
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.all(16),
@@ -53,6 +51,8 @@ class HistoryScreen extends StatelessWidget {
               ],
             ),
           ),
+
+          // History list
           Expanded(
             child: history.isEmpty
                 ? const Center(
@@ -64,8 +64,9 @@ class HistoryScreen extends StatelessWidget {
                     itemBuilder: (ctx, i) => _HistoryTile(record: history[i]),
                   ),
           ),
-          // زر الأرشفة للأدمن فقط
-          if (state.isAdmin && state.history.isNotEmpty)
+
+          // Archive button
+          if (state.history.isNotEmpty)
             Padding(
               padding: const EdgeInsets.all(12),
               child: SizedBox(
@@ -106,23 +107,11 @@ class HistoryScreen extends StatelessWidget {
           FilledButton(
             onPressed: () async {
               Navigator.pop(context);
-              // أظهر loading
+              await state.archiveAndClear();
               if (context.mounted) {
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (_) => const Center(
-                    child: CircularProgressIndicator(color: Color(0xFF38bdf8)),
-                  ),
-                );
-              }
-              final success = await state.archiveAndClear();
-              // أغلق loading
-              if (context.mounted) Navigator.pop(context);
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                  content: Text(success ? '✅ تم الأرشفة بنجاح' : '❌ فيه مشكلة، جرب تاني'),
-                  backgroundColor: success ? Colors.green : Colors.red,
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('✅ تم الأرشفة بنجاح'),
+                  backgroundColor: Colors.green,
                 ));
               }
             },
