@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../services/firebase_service.dart';
 
 class ArchiveScreen extends StatefulWidget {
@@ -21,8 +19,6 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-
-    // جرب Firebase أول
     final raw = await FirebaseService.get('archives');
     if (raw != null && raw is Map) {
       _archives = raw.values
@@ -30,18 +26,6 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
           .toList()
           .reversed
           .toList();
-    } else {
-      // لو Firebase مش شغال، اقرأ من المحلي
-      final prefs = await SharedPreferences.getInstance();
-      final local = prefs.getString('local_archives');
-      if (local != null) {
-        final list = jsonDecode(local) as List;
-        _archives = list
-            .map((v) => Map<String, dynamic>.from(v))
-            .toList()
-            .reversed
-            .toList();
-      }
     }
     setState(() => _loading = false);
   }
