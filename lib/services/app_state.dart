@@ -106,6 +106,7 @@ class AppState extends ChangeNotifier {
         'num_devices': numDevices,
         'admin_password_hash': adminPasswordHash,
         'devices_state': devices.map((d) => d.toJson()).toList(),
+        'id': 'main',
       };
 
   Future<void> saveData() async {
@@ -224,7 +225,7 @@ class AppState extends ChangeNotifier {
     SupabaseService.pushArchive(archive);
   }
 
-  bool get isLoggedIn => isAdmin;
+  bool get isLoggedIn => isAdmin || userRole == "cashier";
 
   // إضافة وقت للجهاز
   void addTime(PSDevice d, int minutes) {
@@ -285,7 +286,7 @@ class AppState extends ChangeNotifier {
       notifyListeners();
       return true;
     } else if (hash == cashierPasswordHash) {
-      isAdmin = true;
+      isAdmin = false;
       userRole = 'cashier';
       notifyListeners();
       return true;
