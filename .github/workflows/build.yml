@@ -26,56 +26,48 @@ jobs:
           channel: 'stable'
 
       - name: Fix Firebase shim
-        run: |
-          cat > lib/services/firebase_service.dart << 'DART'
-import 'supabase_service.dart';
-export 'supabase_service.dart';
+        run: python3 -c "
+content = '''import \"supabase_service.dart\";
+export \"supabase_service.dart\";
 
 class FirebaseService {
   static Future<dynamic> get(String path) async {
-    if (path == 'archives') return await SupabaseService.getArchives();
+    if (path == \"archives\") return await SupabaseService.getArchives();
     return await SupabaseService.getAppData();
   }
   static Future<bool> set(String path, dynamic data) =>
       SupabaseService.setAppData(Map<String, dynamic>.from(data));
   static Future<String?> push(String path, dynamic data) async {
-    final ok = path == 'yearly_archives'
+    final ok = path == \"yearly_archives\"
         ? await SupabaseService.pushYearlyArchive(Map<String, dynamic>.from(data))
         : await SupabaseService.pushArchive(Map<String, dynamic>.from(data));
-    return ok ? 'ok' : null;
+    return ok ? \"ok\" : null;
   }
   static Future<bool> delete(String path) => SupabaseService.deleteArchives();
 }
-DART
+''';
+open('lib/services/firebase_service.dart', 'w').write(content)
+print('Firebase shim created')
+"
 
       - name: Generate app icon
         run: |
           sudo apt-get install -y imagemagick
-          convert -size 512x512 xc:'#0b0e14' \
-            -fill none -stroke '#38bdf8' -strokewidth 8 \
+          convert -size 512x512 xc:"#0b0e14" \
+            -fill none -stroke "#38bdf8" -strokewidth 8 \
             -draw "circle 256,256 256,56" \
             -font DejaVu-Sans-Bold -pointsize 140 \
-            -fill '#38bdf8' -gravity Center \
-            -annotate -0+0 'PS' \
+            -fill "#38bdf8" -gravity Center \
+            -annotate -0+0 "PS" \
             /tmp/icon.png
-          mkdir -p android/app/src/main/res/mipmap-xxxhdpi
-          mkdir -p android/app/src/main/res/mipmap-xxhdpi
-          mkdir -p android/app/src/main/res/mipmap-xhdpi
-          mkdir -p android/app/src/main/res/mipmap-hdpi
-          mkdir -p android/app/src/main/res/mipmap-mdpi
-          convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 96x96  android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 72x72  android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 48x48  android/app/src/main/res/mipmap-mdpi/ic_launcher.png
 
       - name: Create Flutter scaffold
         run: |
           flutter create --org com.starnet --project-name ps_harifa temp_app
-          cp -r temp_app/android . 2>/dev/null || true
-          cp -r temp_app/ios . 2>/dev/null || true
+          cp -r temp_app/android .
+          cp -r temp_app/ios .
           rm -rf temp_app
-          # restore icon after scaffold
+          sudo apt-get install -y imagemagick || true
           convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 96x96  android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
