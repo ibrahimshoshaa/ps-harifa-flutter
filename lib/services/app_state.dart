@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:crypto/crypto.dart';
 import '../models/device.dart';
-import 'firebase_service.dart';
+import 'supabase_service.dart';
 
 class AppState extends ChangeNotifier {
   List<PSDevice> devices = [];
@@ -17,28 +17,20 @@ class AppState extends ChangeNotifier {
     'إندومي': 25,
   };
   String adminPasswordHash = '';
-  String cashierPasswordHash = '';
   int numDevices = 6;
   bool isAdmin = false;
-  bool isCashier = false;
   Timer? _clockTimer;
   Timer? _syncTimer;
   int _syncCounter = 0;
-  bool _archiving = false; // ← منع sync أثناء الأرشفة
-
-  bool get isLoggedIn => isAdmin || isCashier;
 
   static String hashPassword(String p) =>
       sha256.convert(utf8.encode(p)).toString();
 
-  static const String _defaultAdminHash =
+  static const String _defaultHash =
       '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92';
-  static const String _defaultCashierHash =
-      'ef797c8118f02dfb649607dd5d3f8c7623048c9c063d532cc95c5ed7a898a64f';
 
   AppState() {
-    adminPasswordHash = _defaultAdminHash;
-    cashierPasswordHash = _defaultCashierHash;
+    adminPasswordHash = _defaultHash;
     _initDevices();
     loadData();
     _startClock();
@@ -56,20 +48,22 @@ class AppState extends ChangeNotifier {
       _syncCounter++;
       if (_syncCounter >= 300) {
         _syncCounter = 0;
-        if (!_archiving) _syncToFirebase();
+        _syncToSupabase();
       }
       notifyListeners();
     });
   }
 
   Future<void> loadData() async {
+    // محلي أول
     final prefs = await SharedPreferences.getInstance();
     final local = prefs.getString('app_data');
     if (local != null) {
       _applyData(jsonDecode(local));
       notifyListeners();
     }
-    _syncFromFirebase();
+    // Supabase في الخلفية
+    _syncFromSupabase();
   }
 
   void _applyData(Map<String, dynamic> data) {
@@ -78,7 +72,6 @@ class AppState extends ChangeNotifier {
     menu = Map<String, int>.from(data['menu'] ?? menu);
     numDevices = data['num_devices'] ?? 6;
     adminPasswordHash = data['admin_password_hash'] ?? adminPasswordHash;
-    cashierPasswordHash = data['cashier_password_hash'] ?? cashierPasswordHash;
     final devStates = data['devices_state'] as List? ?? [];
     devices = [];
     for (int i = 0; i < numDevices; i++) {
@@ -97,7 +90,6 @@ class AppState extends ChangeNotifier {
         'menu': menu,
         'num_devices': numDevices,
         'admin_password_hash': adminPasswordHash,
-        'cashier_password_hash': cashierPasswordHash,
         'devices_state': devices.map((d) => d.toJson()).toList(),
       };
 
@@ -107,15 +99,14 @@ class AppState extends ChangeNotifier {
     await prefs.setString('app_data', jsonEncode(data));
   }
 
-  Future<void> _syncToFirebase() async {
-    await FirebaseService.set('app_data', _buildDataDict());
+  Future<void> _syncToSupabase() async {
+    await SupabaseService.setAppData(_buildDataDict());
   }
 
-  Future<void> _syncFromFirebase() async {
-    if (_archiving) return; // ← مش نرجع بيانات قديمة أثناء الأرشفة
-    final data = await FirebaseService.get('app_data');
+  Future<void> _syncFromSupabase() async {
+    final data = await SupabaseService.getAppData();
     if (data != null) {
-      _applyData(Map<String, dynamic>.from(data));
+      _applyData(data);
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('app_data', jsonEncode(data));
       notifyListeners();
@@ -146,26 +137,6 @@ class AppState extends ChangeNotifier {
       d.isPaused = true;
       d.pauseStartTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     }
-    saveData();
-    notifyListeners();
-  }
-
-  void addTime(PSDevice d, int minutes) {
-    if (d.startTime != null) {
-      d.startTime = d.startTime! - minutes * 60;
-    }
-    saveData();
-    notifyListeners();
-  }
-
-  void cancelDevice(PSDevice d) {
-    d.status = 'متاح';
-    d.startTime = null;
-    d.addedSeconds = 0;
-    d.isPaused = false;
-    d.pauseStartTime = null;
-    d.orders = {};
-    d.timerText = '00:00:00';
     saveData();
     notifyListeners();
   }
@@ -211,57 +182,58 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> archiveAndClear() async {
-    if (history.isEmpty) return false;
-    _archiving = true; // ← وقف الـ sync
+  Future<void> archiveAndClear() async {
+    if (history.isEmpty) return;
+    final totalTime = history.fold(0.0, (s, h) => s + ((h['time_cost'] as num?) ?? 0));
+    final totalBuffet = history.fold(0.0, (s, h) => s + ((h['buffet_cost'] as num?) ?? 0));
+    final archive = {
+      'date': DateTime.now().toString(),
+      'total_time': totalTime,
+      'total_buffet': totalBuffet,
+      'total_overall': totalTime + totalBuffet,
+      'records': history,
+    };
 
-    try {
-      final totalTime = history.fold(0.0, (s, h) => s + (h['time_cost'] ?? 0));
-      final totalBuffet = history.fold(0.0, (s, h) => s + (h['buffet_cost'] ?? 0));
-      final archive = {
-        'date': DateTime.now().toString(),
-        'total_time': totalTime,
-        'total_buffet': totalBuffet,
-        'total_overall': totalTime + totalBuffet,
-        'records': history,
-      };
+    // حفظ محلي في SharedPreferences أولاً
+    final prefs = await SharedPreferences.getInstance();
+    final localArchives = jsonDecode(prefs.getString('local_archives') ?? '[]') as List;
+    localArchives.add(archive);
+    await prefs.setString('local_archives', jsonEncode(localArchives));
 
-      // 1) ارفع الأرشيف لـ Firebase
-      final result = await FirebaseService.push('archives', archive);
-      if (result == null) return false;
+    // مسح الـ history فوراً
+    history.clear();
+    await saveData();
+    notifyListeners();
 
-      // 2) امسح الـ history محلياً
-      history.clear();
-
-      // 3) احفظ محلياً
-      await saveData();
-
-      // 4) ارفع البيانات الجديدة (بدون history) لـ Firebase
-      // لو فشل، جرب تاني — مهم عشان ميرجعش history قديم لو الأبلكيشن اتفتح من جديد
-      final syncOk = await FirebaseService.set('app_data', _buildDataDict());
-      if (!syncOk) {
-        // جرب مرة تانية بعد ثانيتين
-        await Future.delayed(const Duration(seconds: 2));
-        await FirebaseService.set('app_data', _buildDataDict());
-      }
-
-      notifyListeners();
-      return true;
-    } finally {
-      _archiving = false; // ← فك الـ sync
-    }
+    // رفع على Supabase في الخلفية
+    SupabaseService.pushArchive(archive);
   }
 
-  // --- Menu Management ---
+  bool get isLoggedIn => isAdmin;
 
-  void addMenuItem(String name, int price) {
-    menu[name] = price;
+  // إضافة وقت للجهاز
+  void addTime(PSDevice d, int minutes) {
+    d.addedSeconds += minutes * 60;
     saveData();
     notifyListeners();
   }
 
-  void removeMenuItem(String name) {
-    menu.remove(name);
+  // إلغاء الجهاز بدون حساب
+  void cancelDevice(PSDevice d) {
+    d.status = 'متاح';
+    d.startTime = null;
+    d.addedSeconds = 0;
+    d.isPaused = false;
+    d.pauseStartTime = null;
+    d.orders = {};
+    d.timerText = '00:00:00';
+    saveData();
+    notifyListeners();
+  }
+
+  // إدارة قائمة البوفيه
+  void addMenuItem(String name, int price) {
+    menu[name] = price;
     saveData();
     notifyListeners();
   }
@@ -273,38 +245,36 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Auth ---
+  void removeMenuItem(String name) {
+    menu.remove(name);
+    saveData();
+    notifyListeners();
+  }
 
-  String? login(String password) {
-    final hash = hashPassword(password);
-    if (hash == adminPasswordHash) {
+  // باسورد الكاشير
+  String cashierPasswordHash = '';
+
+  void changeCashierPassword(String newPass) {
+    cashierPasswordHash = hashPassword(newPass);
+    saveData();
+  }
+
+  bool login(String password) {
+    if (hashPassword(password) == adminPasswordHash) {
       isAdmin = true;
-      isCashier = false;
       notifyListeners();
-      return 'admin';
+      return true;
     }
-    if (hash == cashierPasswordHash) {
-      isCashier = true;
-      isAdmin = false;
-      notifyListeners();
-      return 'cashier';
-    }
-    return null;
+    return false;
   }
 
   void logout() {
     isAdmin = false;
-    isCashier = false;
     notifyListeners();
   }
 
   void changePassword(String newPass) {
     adminPasswordHash = hashPassword(newPass);
-    saveData();
-  }
-
-  void changeCashierPassword(String newPass) {
-    cashierPasswordHash = hashPassword(newPass);
     saveData();
   }
 
@@ -337,7 +307,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _clockTimer?.cancel();
     _syncTimer?.cancel();
-    if (!_archiving) _syncToFirebase();
+    _syncToSupabase();
     super.dispose();
   }
 }
