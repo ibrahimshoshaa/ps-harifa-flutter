@@ -237,7 +237,13 @@ class AppState extends ChangeNotifier {
       await saveData();
 
       // 4) ارفع البيانات الجديدة (بدون history) لـ Firebase
-      await _syncToFirebase();
+      // لو فشل، جرب تاني — مهم عشان ميرجعش history قديم لو الأبلكيشن اتفتح من جديد
+      final syncOk = await FirebaseService.set('app_data', _buildDataDict());
+      if (!syncOk) {
+        // جرب مرة تانية بعد ثانيتين
+        await Future.delayed(const Duration(seconds: 2));
+        await FirebaseService.set('app_data', _buildDataDict());
+      }
 
       notifyListeners();
       return true;
@@ -331,7 +337,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _clockTimer?.cancel();
     _syncTimer?.cancel();
-    _syncToFirebase();
+    if (!_archiving) _syncToFirebase();
     super.dispose();
   }
 }
