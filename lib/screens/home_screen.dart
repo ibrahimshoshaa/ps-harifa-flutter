@@ -75,13 +75,14 @@ class _BottomBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _BarButton(
-            icon: Icons.history,
-            label: 'السجلات',
-            color: const Color(0xFF38bdf8),
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const HistoryScreen())),
-          ),
+          if (state.isAdmin)
+            _BarButton(
+              icon: Icons.history,
+              label: 'السجلات',
+              color: const Color(0xFF38bdf8),
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const HistoryScreen())),
+            ),
           // الإعدادات للأدمن فقط
           if (state.isAdmin)
             _BarButton(
