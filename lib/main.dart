@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'services/app_state.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/cashier_screen.dart';
 
 void main() {
   runApp(
@@ -38,8 +39,7 @@ class PSApp extends StatelessWidget {
           style: FilledButton.styleFrom(
             backgroundColor: const Color(0xFF38bdf8),
             foregroundColor: Colors.black,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
         ),
       ),
@@ -54,6 +54,8 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<AppState>();
-    return state.isLoggedIn ? const HomeScreen() : const LoginScreen();
+    if (!state.isLoggedIn) return const LoginScreen();
+    if (state.userRole == 'cashier') return const CashierScreen();
+    return const HomeScreen();
   }
 }
