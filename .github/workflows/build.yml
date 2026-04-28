@@ -26,40 +26,12 @@ jobs:
           channel: 'stable'
 
       - name: Fix Firebase shim
-        run: python3 -c "
-content = '''import \"supabase_service.dart\";
-export \"supabase_service.dart\";
-
-class FirebaseService {
-  static Future<dynamic> get(String path) async {
-    if (path == \"archives\") return await SupabaseService.getArchives();
-    return await SupabaseService.getAppData();
-  }
-  static Future<bool> set(String path, dynamic data) =>
-      SupabaseService.setAppData(Map<String, dynamic>.from(data));
-  static Future<String?> push(String path, dynamic data) async {
-    final ok = path == \"yearly_archives\"
-        ? await SupabaseService.pushYearlyArchive(Map<String, dynamic>.from(data))
-        : await SupabaseService.pushArchive(Map<String, dynamic>.from(data));
-    return ok ? \"ok\" : null;
-  }
-  static Future<bool> delete(String path) => SupabaseService.deleteArchives();
-}
-''';
-open('lib/services/firebase_service.dart', 'w').write(content)
-print('Firebase shim created')
-"
+        run: python3 fix_firebase.py
 
       - name: Generate app icon
         run: |
           sudo apt-get install -y imagemagick
-          convert -size 512x512 xc:"#0b0e14" \
-            -fill none -stroke "#38bdf8" -strokewidth 8 \
-            -draw "circle 256,256 256,56" \
-            -font DejaVu-Sans-Bold -pointsize 140 \
-            -fill "#38bdf8" -gravity Center \
-            -annotate -0+0 "PS" \
-            /tmp/icon.png
+          convert -size 512x512 xc:"#0b0e14" -fill none -stroke "#38bdf8" -strokewidth 8 -draw "circle 256,256 256,56" -font DejaVu-Sans-Bold -pointsize 140 -fill "#38bdf8" -gravity Center -annotate -0+0 "PS" /tmp/icon.png
 
       - name: Create Flutter scaffold
         run: |
@@ -67,12 +39,11 @@ print('Firebase shim created')
           cp -r temp_app/android .
           cp -r temp_app/ios .
           rm -rf temp_app
-          sudo apt-get install -y imagemagick || true
           convert /tmp/icon.png -resize 192x192 android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
           convert /tmp/icon.png -resize 144x144 android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 96x96  android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 72x72  android/app/src/main/res/mipmap-hdpi/ic_launcher.png
-          convert /tmp/icon.png -resize 48x48  android/app/src/main/res/mipmap-mdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 96x96 android/app/src/main/res/mipmap-xhdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 72x72 android/app/src/main/res/mipmap-hdpi/ic_launcher.png
+          convert /tmp/icon.png -resize 48x48 android/app/src/main/res/mipmap-mdpi/ic_launcher.png
 
       - name: Install dependencies
         run: flutter pub get
