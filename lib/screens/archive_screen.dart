@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import '../services/firebase_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/supabase_service.dart';
 
 class ArchiveScreen extends StatefulWidget {
   const ArchiveScreen({super.key});
@@ -19,13 +21,20 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final raw = await FirebaseService.get('archives');
-    if (raw != null && raw is Map) {
-      _archives = raw.values
-          .map((v) => Map<String, dynamic>.from(v))
-          .toList()
-          .reversed
-          .toList();
+    final list = await SupabaseService.getArchives();
+    if (list.isNotEmpty) {
+      _archives = list;
+    } else {
+      // fallback محلي
+      final prefs = await SharedPreferences.getInstance();
+      final local = prefs.getString('local_archives');
+      if (local != null) {
+        _archives = (jsonDecode(local) as List)
+            .map((v) => Map<String, dynamic>.from(v))
+            .toList()
+            .reversed
+            .toList();
+      }
     }
     setState(() => _loading = false);
   }
@@ -138,8 +147,8 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
                 'sessions_count': _archives.length,
                 'sessions': _archives,
               };
-              await FirebaseService.push('yearly_archives', entry);
-              await FirebaseService.delete('archives');
+              await SupabaseService.pushYearlyArchive(entry);
+              await SupabaseService.deleteArchives();
               await _load();
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
