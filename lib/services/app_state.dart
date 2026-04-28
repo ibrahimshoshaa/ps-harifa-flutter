@@ -26,8 +26,8 @@ class AppState extends ChangeNotifier {
   static String hashPassword(String p) =>
       sha256.convert(utf8.encode(p)).toString();
 
-  static const String _defaultHash =
-      '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92';
+  static const String _defaultHash = '056cc3e4b91ffa46435bb981d0d98c329222ca41cf12825a533797330a9cc56e';
+  static const String _defaultCashierHash = '03c4a40b273cfa091c7f8adfb5bd144872daabe94678c01526bd8abcc0c685ec';
 
   AppState() {
     adminPasswordHash = _defaultHash;
@@ -67,15 +67,30 @@ class AppState extends ChangeNotifier {
   }
 
   void _applyData(Map<String, dynamic> data) {
-    history = List<Map<String, dynamic>>.from(data['history'] ?? []);
-    prices = Map<String, int>.from(data['prices'] ?? prices);
-    menu = Map<String, int>.from(data['menu'] ?? menu);
-    numDevices = data['num_devices'] ?? 6;
+    // Supabase بترجع jsonb كـ Map/List مباشرة
+    final rawHistory = data['history'];
+    if (rawHistory is List) {
+      history = rawHistory.map((h) => Map<String, dynamic>.from(h)).toList();
+    }
+
+    final rawPrices = data['prices'];
+    if (rawPrices is Map) {
+      prices = rawPrices.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+
+    final rawMenu = data['menu'];
+    if (rawMenu is Map) {
+      menu = rawMenu.map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+
+    numDevices = data['num_devices'] ?? numDevices;
     adminPasswordHash = data['admin_password_hash'] ?? adminPasswordHash;
-    final devStates = data['devices_state'] as List? ?? [];
+
+    final rawDevs = data['devices_state'];
+    final devStates = rawDevs is List ? rawDevs : [];
     devices = [];
     for (int i = 0; i < numDevices; i++) {
-      if (i < devStates.length) {
+      if (i < devStates.length && devStates[i] != null) {
         devices.add(PSDevice.fromJson(Map<String, dynamic>.from(devStates[i]), i + 1));
       } else {
         devices.add(PSDevice(id: i + 1));
@@ -252,16 +267,26 @@ class AppState extends ChangeNotifier {
   }
 
   // باسورد الكاشير
-  String cashierPasswordHash = '';
+  String cashierPasswordHash = '03c4a40b273cfa091c7f8adfb5bd144872daabe94678c01526bd8abcc0c685ec';
 
   void changeCashierPassword(String newPass) {
     cashierPasswordHash = hashPassword(newPass);
     saveData();
   }
 
+  // نوع المستخدم: admin أو cashier
+  String userRole = '';
+
   bool login(String password) {
-    if (hashPassword(password) == adminPasswordHash) {
+    final hash = hashPassword(password);
+    if (hash == adminPasswordHash) {
       isAdmin = true;
+      userRole = 'admin';
+      notifyListeners();
+      return true;
+    } else if (hash == cashierPasswordHash) {
+      isAdmin = true;
+      userRole = 'cashier';
       notifyListeners();
       return true;
     }
