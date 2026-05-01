@@ -2,14 +2,18 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class FirebaseService {
-  static const String _baseUrl = 'https://ps-harifa-default-rtdb.firebaseio.com';
-  static const String _secret = 'loFnECpWdlhEHnzGdPW1VoWKbZPepbgrqDVjTnEY';
+  static const String _baseUrl =
+      'https://ps-harifa-default-rtdb.firebaseio.com';
+  static const String _secret =
+      'loFnECpWdlhEHnzGdPW1VoWKbZPepbgrqDVjTnEY';
 
   static String _url(String path) => '$_baseUrl/$path.json?auth=$_secret';
 
   static Future<dynamic> get(String path) async {
     try {
-      final r = await http.get(Uri.parse(_url(path))).timeout(const Duration(seconds: 10));
+      final r = await http
+          .get(Uri.parse(_url(path)))
+          .timeout(const Duration(seconds: 10));
       if (r.statusCode == 200) return jsonDecode(r.body);
     } catch (e) {
       print('Firebase GET error: $e');
