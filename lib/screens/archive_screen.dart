@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import '../services/supabase_service.dart';
+import '../services/firebase_service.dart';
 
 class ArchiveScreen extends StatefulWidget {
   const ArchiveScreen({super.key});
@@ -21,36 +19,44 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
-    final list = await SupabaseService.getArchives();
-    if (list.isNotEmpty) {
-      _archives = list;
-    } else {
-      // fallback محلي
-      final prefs = await SharedPreferences.getInstance();
-      final local = prefs.getString('local_archives');
-      if (local != null) {
-        _archives = (jsonDecode(local) as List)
-            .map((v) => Map<String, dynamic>.from(v))
+    try {
+      final data = await FirebaseService.get('archives');
+      if (data != null && data is Map) {
+        final list = data.values
+            .map((v) => Map<String, dynamic>.from(v as Map))
             .toList()
-            .reversed
-            .toList();
+          ..sort((a, b) {
+            final da = DateTime.tryParse(a['date']?.toString() ?? '') ?? DateTime(0);
+            final db = DateTime.tryParse(b['date']?.toString() ?? '') ?? DateTime(0);
+            return db.compareTo(da);
+          });
+        _archives = list;
+      } else {
+        _archives = [];
       }
+    } catch (e) {
+      debugPrint('Archive load error: $e');
+      _archives = [];
     }
     setState(() => _loading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final grandTotal = _archives.fold(0.0, (s, a) => s + (a['total_overall'] ?? 0));
-    final grandTime = _archives.fold(0.0, (s, a) => s + (a['total_time'] ?? 0));
-    final grandBuffet = _archives.fold(0.0, (s, a) => s + (a['total_buffet'] ?? 0));
+    final grandTotal =
+        _archives.fold(0.0, (s, a) => s + (a['total_overall'] ?? 0));
+    final grandTime =
+        _archives.fold(0.0, (s, a) => s + (a['total_time'] ?? 0));
+    final grandBuffet =
+        _archives.fold(0.0, (s, a) => s + (a['total_buffet'] ?? 0));
 
     return Scaffold(
       backgroundColor: const Color(0xFF0b0e14),
       appBar: AppBar(
         backgroundColor: const Color(0xFF0b0e14),
         title: const Text('الأرشيف الشامل',
-            style: TextStyle(color: Color(0xFF38bdf8), fontWeight: FontWeight.bold)),
+            style: TextStyle(
+                color: Color(0xFF38bdf8), fontWeight: FontWeight.bold)),
         leading: const BackButton(color: Colors.white),
         actions: [
           IconButton(
@@ -59,7 +65,8 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF38bdf8)))
+          ? const Center(
+              child: CircularProgressIndicator(color: Color(0xFF38bdf8)))
           : Column(
               children: [
                 // Summary
@@ -69,7 +76,8 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF1c2128),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFF38bdf8).withOpacity(0.4)),
+                    border: Border.all(
+                        color: const Color(0xFF38bdf8).withOpacity(0.4)),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -83,19 +91,22 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
                   ),
                 ),
 
-                // Reset button
+                // Yearly archive button
                 if (_archives.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: () => _confirmYearlyArchive(context, grandTotal, grandTime, grandBuffet),
+                        onPressed: () => _confirmYearlyArchive(
+                            context, grandTotal, grandTime, grandBuffet),
                         icon: const Icon(Icons.archive),
-                        label: const Text('تصفير وحفظ في الأرشيف السنوي'),
+                        label:
+                            const Text('تصفير وحفظ في الأرشيف السنوي'),
                         style: FilledButton.styleFrom(
                           backgroundColor: Colors.purple.shade700,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12)),
                         ),
                       ),
                     ),
@@ -120,12 +131,14 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
     );
   }
 
-  void _confirmYearlyArchive(BuildContext ctx, double total, double time, double buffet) {
+  void _confirmYearlyArchive(
+      BuildContext ctx, double total, double time, double buffet) {
     showDialog(
       context: ctx,
       builder: (_) => AlertDialog(
         backgroundColor: const Color(0xFF1c2128),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('حفظ في الأرشيف السنوي؟',
             style: TextStyle(color: Color(0xFF38bdf8))),
         content: Text(
@@ -134,7 +147,8 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('إلغاء', style: TextStyle(color: Colors.white54))),
+              child: const Text('إلغاء',
+                  style: TextStyle(color: Colors.white54))),
           FilledButton(
             onPressed: () async {
               Navigator.pop(ctx);
@@ -147,8 +161,8 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
                 'sessions_count': _archives.length,
                 'sessions': _archives,
               };
-              await SupabaseService.pushYearlyArchive(entry);
-              await SupabaseService.deleteArchives();
+              await FirebaseService.push('yearly_archives', entry);
+              await FirebaseService.delete('archives');
               await _load();
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -157,7 +171,8 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
                 ));
               }
             },
-            style: FilledButton.styleFrom(backgroundColor: Colors.purple.shade700),
+            style: FilledButton.styleFrom(
+                backgroundColor: Colors.purple.shade700),
             child: const Text('حفظ وتصفير'),
           ),
         ],
@@ -165,6 +180,8 @@ class _ArchiveScreenState extends State<ArchiveScreen> {
     );
   }
 }
+
+// ─── Widgets ──────────────────────────────────────────────────────────────────
 
 class _ArchiveTile extends StatelessWidget {
   final Map<String, dynamic> archive;
@@ -180,18 +197,25 @@ class _ArchiveTile extends StatelessWidget {
         border: Border.all(color: Colors.white10),
       ),
       child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        title: Text('وردية: ${archive['date']?.toString().substring(0, 10) ?? ''}',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-        trailing: Text('${(archive['total_overall'] ?? 0).toStringAsFixed(1)} ج',
-            style: const TextStyle(color: Color(0xFF4ade80), fontWeight: FontWeight.bold)),
+        tilePadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        title: Text(
+            'وردية: ${archive['date']?.toString().substring(0, 10) ?? ''}',
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, fontSize: 13)),
+        trailing: Text(
+            '${(archive['total_overall'] ?? 0).toStringAsFixed(1)} ج',
+            style: const TextStyle(
+                color: Color(0xFF4ade80), fontWeight: FontWeight.bold)),
         children: [
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Column(
               children: [
-                _Row('🎮 اللعب', '${(archive['total_time'] ?? 0).toStringAsFixed(1)} ج'),
-                _Row('🥤 البوفيه', '${(archive['total_buffet'] ?? 0).toStringAsFixed(1)} ج'),
+                _Row('🎮 اللعب',
+                    '${(archive['total_time'] ?? 0).toStringAsFixed(1)} ج'),
+                _Row('🥤 البوفيه',
+                    '${(archive['total_buffet'] ?? 0).toStringAsFixed(1)} ج'),
               ],
             ),
           ),
@@ -211,7 +235,8 @@ class _SumTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: Colors.white54)),
+        Text(label,
+            style: const TextStyle(fontSize: 11, color: Colors.white54)),
         const SizedBox(height: 4),
         Text('${value.toStringAsFixed(1)} ج',
             style: TextStyle(
@@ -234,7 +259,8 @@ class _Row extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+          Text(label,
+              style: const TextStyle(color: Colors.white70, fontSize: 13)),
           Text(value, style: const TextStyle(color: Colors.white)),
         ],
       ),
