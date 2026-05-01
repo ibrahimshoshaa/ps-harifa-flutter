@@ -77,6 +77,10 @@ class DeviceCard extends StatelessWidget {
             // Timer
             _PulsingTimer(device: device),
 
+            // Quick time buttons (only when active)
+            if (device.isActive)
+              _QuickTimeButtons(device: device),
+
             // Prices
             Column(
               children: [
@@ -167,6 +171,121 @@ class _PulsingTimerState extends State<_PulsingTimer>
                     )
                   ]
                 : [],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── Quick Time Buttons ────────────────────────────────────────────────────────
+
+class _QuickTimeButtons extends StatelessWidget {
+  final PSDevice device;
+  const _QuickTimeButtons({required this.device});
+
+  static const List<int> _times = [6, 12, 24, 36, 48, 60];
+
+  @override
+  Widget build(BuildContext context) {
+    final state = context.watch<AppState>();
+    final isAdmin = state.isAdmin;
+
+    return GestureDetector(
+      // منع الضغط على الكارت لما المستخدم يضغط على الأزرار
+      onTap: () {},
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          alignment: WrapAlignment.center,
+          children: _times.map((min) {
+            final label = min >= 60 ? '${min ~/ 60}س' : '${min}د';
+            return SizedBox(
+              width: (min == 60) ? 52 : 44,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // زرار + (الكل)
+                  _TimeBtn(
+                    label: '+$label',
+                    color: const Color(0xFF4ade80),
+                    onTap: () {
+                      state.addTime(device, min);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('✅ +$label لـ ${device.displayName}'),
+                        backgroundColor: Colors.green,
+                        duration: const Duration(seconds: 1),
+                      ));
+                    },
+                  ),
+                  const SizedBox(height: 3),
+                  // زرار - (أدمن فقط)
+                  _TimeBtn(
+                    label: '-$label',
+                    color: isAdmin ? Colors.redAccent : Colors.white12,
+                    onTap: isAdmin
+                        ? () {
+                            // منع الوقت من يبقي سالب
+                            final newAdded = device.addedSeconds - (min * 60);
+                            final minAllowed = -(device.elapsedSeconds - device.addedSeconds);
+                            if (newAdded < minAllowed) {
+                              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                content: Text('⚠️ مينفعش تنقص أكتر من الوقت الحالي'),
+                                backgroundColor: Colors.orange,
+                                duration: Duration(seconds: 1),
+                              ));
+                              return;
+                            }
+                            state.addTime(device, -min);
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text('⏪ -$label من ${device.displayName}'),
+                              backgroundColor: Colors.red.shade700,
+                              duration: const Duration(seconds: 1),
+                            ));
+                          }
+                        : null,
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class _TimeBtn extends StatelessWidget {
+  final String label;
+  final Color color;
+  final VoidCallback? onTap;
+  const _TimeBtn({required this.label, required this.color, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        decoration: BoxDecoration(
+          color: onTap != null ? color.withOpacity(0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: onTap != null ? color.withOpacity(0.5) : Colors.white10,
+            width: 1,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: onTap != null ? color : Colors.white12,
+            ),
           ),
         ),
       ),
