@@ -296,6 +296,7 @@ class AppState extends ChangeNotifier {
 
   void logout() {
     isAdmin = false;
+    userRole = '';
     notifyListeners();
   }
 
