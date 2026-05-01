@@ -29,6 +29,13 @@ class AppState extends ChangeNotifier {
 
   bool get isLoggedIn => isAdmin || isCashier;
 
+  /// 'admin' | 'cashier' | null
+  String? get userRole {
+    if (isAdmin) return 'admin';
+    if (isCashier) return 'cashier';
+    return null;
+  }
+
   static String hashPassword(String p) =>
       sha256.convert(utf8.encode(p)).toString();
 
@@ -81,12 +88,14 @@ class AppState extends ChangeNotifier {
     menu = Map<String, int>.from(data['menu'] ?? menu);
     numDevices = data['num_devices'] ?? 6;
     adminPasswordHash = data['admin_password_hash'] ?? adminPasswordHash;
-    cashierPasswordHash = data['cashier_password_hash'] ?? cashierPasswordHash;
+    cashierPasswordHash =
+        data['cashier_password_hash'] ?? cashierPasswordHash;
     final devStates = data['devices_state'] as List? ?? [];
     devices = [];
     for (int i = 0; i < numDevices; i++) {
       if (i < devStates.length) {
-        devices.add(PSDevice.fromJson(Map<String, dynamic>.from(devStates[i]), i + 1));
+        devices.add(PSDevice.fromJson(
+            Map<String, dynamic>.from(devStates[i]), i + 1));
       } else {
         devices.add(PSDevice(id: i + 1));
       }
@@ -151,7 +160,8 @@ class AppState extends ChangeNotifier {
   void togglePause(PSDevice d) {
     if (d.isPaused) {
       final pausedDuration =
-          (DateTime.now().millisecondsSinceEpoch ~/ 1000) - d.pauseStartTime!;
+          (DateTime.now().millisecondsSinceEpoch ~/ 1000) -
+              d.pauseStartTime!;
       d.startTime = d.startTime! + pausedDuration;
       d.isPaused = false;
       d.pauseStartTime = null;
@@ -229,9 +239,12 @@ class AppState extends ChangeNotifier {
     _archiving = true;
 
     try {
-      final totalTime = history.fold(0.0, (s, h) => s + (h['time_cost'] ?? 0));
-      final totalBuffet = history.fold(0.0, (s, h) => s + (h['buffet_cost'] ?? 0));
-      final historySnapshot = List<Map<String, dynamic>>.from(history);
+      final totalTime =
+          history.fold(0.0, (s, h) => s + (h['time_cost'] ?? 0));
+      final totalBuffet =
+          history.fold(0.0, (s, h) => s + (h['buffet_cost'] ?? 0));
+      final historySnapshot =
+          List<Map<String, dynamic>>.from(history);
       final archive = {
         'date': DateTime.now().toString(),
         'total_time': totalTime,
@@ -240,11 +253,12 @@ class AppState extends ChangeNotifier {
         'records': historySnapshot,
       };
 
-      // 3 محاولات للرفع
       String? result;
       for (int i = 0; i < 3 && result == null; i++) {
         result = await FirebaseService.push('archives', archive);
-        if (result == null) await Future.delayed(const Duration(seconds: 1));
+        if (result == null) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
       }
       if (result == null) return false;
 
