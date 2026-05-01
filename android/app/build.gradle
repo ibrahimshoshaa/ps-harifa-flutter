@@ -14,11 +14,10 @@ if (flutterRoot == null) {
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
-// تفعيل إضافة فايربيز
-apply plugin: 'com.google.gms.google-services' 
+apply plugin: 'com.google.gms.google-services'
 
 android {
-    compileSdkVersion 33 // أو 34 حسب إصدار فلاتر عندك
+    compileSdkVersion 34
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
@@ -30,17 +29,18 @@ android {
     }
 
     defaultConfig {
-        // تأكد إن ده نفس الاسم اللي في Firebase Console
-        applicationId "com.shosha.alharifa" 
+        applicationId "com.shosha.alharifa"
         minSdkVersion 21
-        targetSdkVersion 33
-        versionCode 1
-        versionName "1.0"
+        targetSdkVersion 34
+        versionCode 4
+        versionName "1.0.0"
     }
 
     buildTypes {
         release {
             signingConfig signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }
@@ -51,7 +51,7 @@ flutter {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
-    // مكتبة فايربيز الأساسية للأندرويد
-    implementation platform('com.google.firebase:firebase-bom:32.2.1')
+    implementation platform('com.google.firebase:firebase-bom:33.1.0')
     implementation 'com.google.firebase:firebase-analytics'
+    implementation 'com.google.firebase:firebase-database'
 }
